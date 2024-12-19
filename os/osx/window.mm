@@ -1,18 +1,19 @@
 // LAF OS Library
-// Copyright (C) 2019-2021  Igara Studio S.A.
+// Copyright (C) 2019-2024  Igara Studio S.A.
 // Copyright (C) 2012-2017  David Capello
 //
 // This file is released under the terms of the MIT license.
 // Read LICENSE.txt for more information.
 
 #ifdef HAVE_CONFIG_H
-#include "config.h"
+  #include "config.h"
 #endif
 
 #include "os/osx/window.h"
 
 #include "base/debug.h"
 #include "os/event.h"
+#include "os/osx/app.h"
 #include "os/osx/event_queue.h"
 #include "os/osx/view.h"
 #include "os/osx/window_delegate.h"
@@ -21,8 +22,7 @@
 
 @implementation WindowOSXObjc
 
-- (WindowOSXObjc*)initWithImpl:(os::WindowOSX*)impl
-                          spec:(const os::WindowSpec*)spec
+- (WindowOSXObjc*)initWithImpl:(os::WindowOSX*)impl spec:(const os::WindowSpec*)spec
 {
   // This autoreleasepool reduces the total number of references that
   // the NSWindow object has when we close it.
@@ -37,30 +37,33 @@
       nsScreen = [NSScreen mainScreen];
 
     NSWindowStyleMask style = 0;
-    if (spec->titled()) style |= NSWindowStyleMaskTitled;
-    if (spec->closable()) style |= NSWindowStyleMaskClosable;
-    if (spec->minimizable()) style |= NSWindowStyleMaskMiniaturizable;
-    if (spec->resizable()) style |= NSWindowStyleMaskResizable;
-    if (spec->borderless()) style |= NSWindowStyleMaskBorderless;
+    if (spec->titled())
+      style |= NSWindowStyleMaskTitled;
+    if (spec->closable())
+      style |= NSWindowStyleMaskClosable;
+    if (spec->minimizable())
+      style |= NSWindowStyleMaskMiniaturizable;
+    if (spec->resizable())
+      style |= NSWindowStyleMaskResizable;
+    if (spec->borderless())
+      style |= NSWindowStyleMaskBorderless;
 
     NSRect contentRect;
     if (!spec->contentRect().isEmpty()) {
-      contentRect =
-        NSMakeRect(spec->contentRect().x - nsScreen.frame.origin.x,
-                   nsScreen.frame.size.height - spec->contentRect().y2() - nsScreen.frame.origin.y,
-                   spec->contentRect().w,
-                   spec->contentRect().h);
+      contentRect = NSMakeRect(
+        spec->contentRect().x - nsScreen.frame.origin.x,
+        nsScreen.frame.size.height - spec->contentRect().y2() - nsScreen.frame.origin.y,
+        spec->contentRect().w,
+        spec->contentRect().h);
     }
     else if (!spec->frame().isEmpty()) {
-      NSRect frameRect =
-        NSMakeRect(spec->frame().x - nsScreen.frame.origin.x,
-                   nsScreen.frame.size.height - spec->frame().y2() - nsScreen.frame.origin.y,
-                   spec->frame().w,
-                   spec->frame().h);
+      NSRect frameRect = NSMakeRect(
+        spec->frame().x - nsScreen.frame.origin.x,
+        nsScreen.frame.size.height - spec->frame().y2() - nsScreen.frame.origin.y,
+        spec->frame().w,
+        spec->frame().h);
 
-      contentRect =
-        [NSWindow contentRectForFrameRect:frameRect
-                                styleMask:style];
+      contentRect = [NSWindow contentRectForFrameRect:frameRect styleMask:style];
     }
     else {
       // TODO is there a default size for macOS apps?
@@ -113,7 +116,8 @@
     }
 
     if (spec->parent())
-      self.parentWindow = (__bridge NSWindow*)static_cast<os::WindowOSX*>(spec->parent())->nativeHandle();
+      self.parentWindow =
+        (__bridge NSWindow*)static_cast<os::WindowOSX*>(spec->parent())->nativeHandle();
 
     [self makeKeyAndOrderFront:self];
 
@@ -121,6 +125,9 @@
       self.level = NSFloatingWindowLevel;
       self.hidesOnDeactivate = true;
     }
+
+    if (spec->modal())
+      self.level = NSModalPanelWindowLevel;
 
     // Hide the "View > Show Tab Bar" menu item
     if ([self respondsToSelector:@selector(setTabbingMode:)])
@@ -191,16 +198,13 @@
 
 - (gfx::Size)clientSize
 {
-  return gfx::Size([[self contentView] frame].size.width,
-                   [[self contentView] frame].size.height);
+  return gfx::Size([[self contentView] frame].size.width, [[self contentView] frame].size.height);
 }
 
 - (void)setMousePosition:(const gfx::Point&)position
 {
   NSView* view = self.contentView;
-  NSPoint pt = NSMakePoint(
-    position.x*m_scale,
-    view.frame.size.height - position.y*m_scale);
+  NSPoint pt = NSMakePoint(position.x * m_scale, view.frame.size.height - position.y * m_scale);
 
   pt = [view convertPoint:pt toView:view];
   pt = [view convertPoint:pt toView:nil];
@@ -208,8 +212,7 @@
   pt.y = [[self screen] frame].size.height - pt.y;
 
   CGPoint pos = CGPointMake(pt.x, pt.y);
-  CGEventRef event = CGEventCreateMouseEvent(
-    NULL, kCGEventMouseMoved, pos, kCGMouseButtonLeft);
+  CGEventRef event = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, pos, kCGMouseButtonLeft);
   CGEventPost(kCGHIDEventTap, event);
   CFRelease(event);
 }
@@ -225,48 +228,23 @@
     case os::NativeCursor::SizeNE:
     case os::NativeCursor::SizeNW:
     case os::NativeCursor::SizeSE:
-    case os::NativeCursor::SizeSW:
-      nsCursor = [NSCursor arrowCursor];
-      break;
-    case os::NativeCursor::Crosshair:
-      nsCursor = [NSCursor crosshairCursor];
-      break;
-    case os::NativeCursor::IBeam:
-      nsCursor = [NSCursor IBeamCursor];
-      break;
-    case os::NativeCursor::Link:
-      nsCursor = [NSCursor pointingHandCursor];
-      break;
-    case os::NativeCursor::Forbidden:
-      nsCursor = [NSCursor operationNotAllowedCursor];
-      break;
-    case os::NativeCursor::Move:
-      nsCursor = [NSCursor openHandCursor];
-      break;
-    case os::NativeCursor::SizeNS:
-      nsCursor = [NSCursor resizeUpDownCursor];
-      break;
-    case os::NativeCursor::SizeWE:
-      nsCursor = [NSCursor resizeLeftRightCursor];
-      break;
-    case os::NativeCursor::SizeN:
-      nsCursor = [NSCursor resizeUpCursor];
-      break;
-    case os::NativeCursor::SizeE:
-      nsCursor = [NSCursor resizeRightCursor];
-      break;
-    case os::NativeCursor::SizeS:
-      nsCursor = [NSCursor resizeDownCursor];
-      break;
-    case os::NativeCursor::SizeW:
-      nsCursor = [NSCursor resizeLeftCursor];
-      break;
-    default:
-      break;
+    case os::NativeCursor::SizeSW:    nsCursor = [NSCursor arrowCursor]; break;
+    case os::NativeCursor::Crosshair: nsCursor = [NSCursor crosshairCursor]; break;
+    case os::NativeCursor::IBeam:     nsCursor = [NSCursor IBeamCursor]; break;
+    case os::NativeCursor::Link:      nsCursor = [NSCursor pointingHandCursor]; break;
+    case os::NativeCursor::Forbidden: nsCursor = [NSCursor operationNotAllowedCursor]; break;
+    case os::NativeCursor::Move:      nsCursor = [NSCursor openHandCursor]; break;
+    case os::NativeCursor::SizeNS:    nsCursor = [NSCursor resizeUpDownCursor]; break;
+    case os::NativeCursor::SizeWE:    nsCursor = [NSCursor resizeLeftRightCursor]; break;
+    case os::NativeCursor::SizeN:     nsCursor = [NSCursor resizeUpCursor]; break;
+    case os::NativeCursor::SizeE:     nsCursor = [NSCursor resizeRightCursor]; break;
+    case os::NativeCursor::SizeS:     nsCursor = [NSCursor resizeDownCursor]; break;
+    case os::NativeCursor::SizeW:     nsCursor = [NSCursor resizeLeftCursor]; break;
+    default:                          break;
   }
 
   [self.contentView setCursor:nsCursor];
-  return (nsCursor ? YES: NO);
+  return (nsCursor ? YES : NO);
 }
 
 - (BOOL)canBecomeKeyWindow
@@ -293,8 +271,7 @@ namespace os {
 
 void WindowOSX::createWindow(const os::WindowSpec& spec)
 {
-  m_nsWindow = [[WindowOSXObjc alloc] initWithImpl:this
-                                              spec:&spec];
+  m_nsWindow = [[WindowOSXObjc alloc] initWithImpl:this spec:&spec];
   m_nsWindow.releasedWhenClosed = true;
 }
 
@@ -312,7 +289,7 @@ void WindowOSX::destroyWindow()
     {
       auto app = [NSApplication sharedApplication];
       auto index = [app.windows indexOfObject:m_nsWindow];
-      if (index+1 < app.windows.count) {
+      if (index + 1 < app.windows.count) {
         ++index;
       }
       else {
@@ -322,8 +299,7 @@ void WindowOSX::destroyWindow()
         [[app.windows objectAtIndex:index] makeKeyWindow];
     }
 
-    [m_nsWindow discardEventsMatchingMask:NSEventMaskAny
-                              beforeEvent:nullptr];
+    [m_nsWindow discardEventsMatchingMask:NSEventMaskAny beforeEvent:nullptr];
     [m_nsWindow close];
   }
   m_nsWindow = nil;
@@ -339,7 +315,8 @@ gfx::Rect WindowOSX::frame() const
   NSRect r = m_nsWindow.frame;
   return gfx::Rect(r.origin.x,
                    m_nsWindow.screen.frame.size.height - r.origin.y - r.size.height,
-                   r.size.width, r.size.height);
+                   r.size.width,
+                   r.size.height);
 }
 
 void WindowOSX::setFrame(const gfx::Rect& bounds)
@@ -356,7 +333,8 @@ gfx::Rect WindowOSX::contentRect() const
   NSRect r = [m_nsWindow contentRectForFrameRect:m_nsWindow.frame];
   return gfx::Rect(r.origin.x,
                    m_nsWindow.screen.frame.size.height - r.origin.y - r.size.height,
-                   r.size.width, r.size.height);
+                   r.size.width,
+                   r.size.height);
 }
 
 gfx::Rect WindowOSX::restoredFrame() const
@@ -366,6 +344,9 @@ gfx::Rect WindowOSX::restoredFrame() const
 
 void WindowOSX::activate()
 {
+  if ([m_nsWindow.delegate respondsToSelector:@selector(windowShouldBecomeKey:)] &&
+      ![(id)m_nsWindow.delegate windowShouldBecomeKey:m_nsWindow])
+    return;
   [m_nsWindow makeKeyWindow];
 }
 
@@ -386,7 +367,9 @@ bool WindowOSX::isMaximized() const
 
 bool WindowOSX::isMinimized() const
 {
-  return (m_nsWindow.miniaturized ? true: false);
+  // Return true if the NSWindow is minimized or if the NSApplication
+  // is hidden.
+  return (m_nsWindow.miniaturized || os::AppOSX::instance()->isHidden());
 }
 
 bool WindowOSX::isFullscreen() const
@@ -434,8 +417,7 @@ void WindowOSX::setMousePosition(const gfx::Point& position)
   [m_nsWindow setMousePosition:position];
 }
 
-void WindowOSX::performWindowAction(const WindowAction action,
-                                    const Event* event)
+void WindowOSX::performWindowAction(const WindowAction action, const Event* event)
 {
   if (action == WindowAction::Move) {
     // We cannot use the "m_nsWindow.currentEvent" event directly on
@@ -458,16 +440,15 @@ void WindowOSX::performWindowAction(const WindowAction action,
       mousePosOnWindow = rc.origin;
     }
 
-    NSEvent* newEvent =
-      [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
-                         location:mousePosOnWindow
-                    modifierFlags:0
-                        timestamp:0
-                     windowNumber:m_nsWindow.windowNumber
-                          context:nil
-                      eventNumber:0
-                       clickCount:1
-                         pressure:1.0];
+    NSEvent* newEvent = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
+                                           location:mousePosOnWindow
+                                      modifierFlags:0
+                                          timestamp:0
+                                       windowNumber:m_nsWindow.windowNumber
+                                            context:nil
+                                        eventNumber:0
+                                         clickCount:1
+                                           pressure:1.0];
 
     [m_nsWindow performWindowDragWithEvent:newEvent];
   }
@@ -511,6 +492,8 @@ void WindowOSX::setVisible(bool visible)
     // returns YES).
     if (m_nsWindow.canBecomeMainWindow)
       [m_nsWindow makeMainWindow];
+    else
+      [m_nsWindow setIsVisible:true];
   }
   else {
     [m_nsWindow setIsVisible:false];
@@ -519,20 +502,19 @@ void WindowOSX::setVisible(bool visible)
 
 bool WindowOSX::setCursor(NativeCursor cursor)
 {
-  return ([m_nsWindow setNativeCursor:cursor] ? true: false);
+  return ([m_nsWindow setNativeCursor:cursor] ? true : false);
 }
 
 bool WindowOSX::setCursor(const CursorRef& cursor)
 {
   [m_nsWindow.contentView
-      setCursor:(cursor ? (__bridge NSCursor*)cursor->nativeHandle():
-                          nullptr)];
+    setCursor:(cursor ? (__bridge NSCursor*)cursor->nativeHandle() : nullptr)];
   return true;
 }
 
 bool WindowOSX::isTransparent() const
 {
-  return (m_nsWindow.opaque ? false: true);
+  return (m_nsWindow.opaque ? false : true);
 }
 
 void* WindowOSX::nativeHandle() const
